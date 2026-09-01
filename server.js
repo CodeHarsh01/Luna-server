@@ -83,8 +83,9 @@ wss.on('connection', (ws, request, deviceId) => {
 });
 
 // Railway dynamic PORT variable pass karta hai
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8080;
 
+// Ensure host is strictly '0.0.0.0'
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`[SERVER]: Luna Router running on port ${PORT}`);
 });

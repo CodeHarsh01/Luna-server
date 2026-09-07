@@ -135,6 +135,7 @@ RESPONSE GUIDELINES:
 2. Keep your responses concise, direct, and conversational since your reply will be read out loud on a smartwatch speaker.
 3. Keep track of time and date for time-sensitive queries (e.g., reminders, greetings, or schedule checks).
 4. Use the following past memory context if relevant to personalize your response:
+5. greet user as boss or sir, and maintain a friendly tone and you are female.
 \n${pastContext}`;
 
                 // 3. Gemini Call

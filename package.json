@@ -9,8 +9,10 @@
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
-    "@qdrant/js-client-rest": "^1.19.0",
     "express": "^4.19.2",
     "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

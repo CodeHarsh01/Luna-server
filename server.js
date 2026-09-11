@@ -49,7 +49,7 @@ function log(level, msg, extra) {
 }
 
 // ─── API KEY: env first, hardcoded fallback so server always starts ──────────
-const FALLBACK_GEMINI_API_KEY = 'AQ.Ab8RN6L_65Hi7jTxL9WkNsWomAYEUGzOJNAl2i7Gj2aMAT4YYQ';
+const FALLBACK_GEMINI_API_KEY = 'AQ.Ab8RN6K1BT3rtUvT_kuHaX8ZeqfVu-SsHWhviIYPOyo7WLx8Mw';
 const GEMINI_KEY = process.env.GEMINI_API_KEY || FALLBACK_GEMINI_API_KEY;
 
 const app = express();

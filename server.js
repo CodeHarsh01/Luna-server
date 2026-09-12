@@ -178,7 +178,12 @@ async function webSearch(query) {
 
 async function refreshDailyNews() {
     try {
-        const queries = ['India news today', 'world news today', 'technology news today'];
+        // Use specific, current search terms instead of generic show names
+        const queries = [
+            'breaking news India today headlines', 
+            'latest international world news updates', 
+            'current technology news headlines'
+        ];
         const results = await Promise.all(queries.map(q => webSearch(q)));
         dailyNewsCache = results.filter(Boolean).join('\n').slice(0, 1200);
         log('info', `DAILY NEWS UPDATED: ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`);

@@ -37,7 +37,7 @@ const CONFIG = {
     pingIntervalSec: parseInt(process.env.PING_INTERVAL_SEC, 10) || 30
 };
 
-// ─── STRUCTURED LOGGER (level-aware to minimize server IO) ───────────────────
+// ─── STRUCTURED LOGGER ────────────────────────────────────────────────────────
 const LOG_LEVELS = { error: 0, warn: 1, info: 2, debug: 3 };
 const logLevel = LOG_LEVELS[CONFIG.logLevel] !== undefined ? LOG_LEVELS[CONFIG.logLevel] : LOG_LEVELS.info;
 
@@ -48,8 +48,8 @@ function log(level, msg, extra) {
     else console.log(line, extra || '');
 }
 
-// ─── API KEY: env first, hardcoded fallback so server always starts ──────────
-const FALLBACK_GEMINI_API_KEY = 'AQ.Ab8RN6K1BT3rtUvT_kuHaX8ZeqfVu-SsHWhviIYPOyo7WLx8Mw';
+// ─── API KEY ──────────────────────────────────────────────────────────────────
+const FALLBACK_GEMINI_API_KEY = 'AQ.Ab8RN6Lko7qbW3cnw1R5dE4eJO9rz2Aek1x6jc-hNDm-WYKwiQ';
 const GEMINI_KEY = process.env.GEMINI_API_KEY || FALLBACK_GEMINI_API_KEY;
 
 const app = express();
@@ -66,17 +66,12 @@ const lastSeen = new Map();
 // ─── NODE CLASSIFICATION LOOKUPS ─────────────────────────────────────────────
 const PC_NODES = new Set(['pc', 'laptop', 'desktop', 'lunapc']);
 const ANDROID_NODES = new Set(['android', 'mobile', 'phone', 'lunaandroid']);
-
-// The 3 main Luna nodes. ALWAYS reported online/active regardless of socket state,
-// so the mesh never shows the family as offline even if a link blips.
 const KNOWN_NODES = ['luna_watch', 'lunapc', 'lunaandroid'];
 
-// A node is "active" if a real socket is connected OR it is a known Luna node.
 function nodeIsActive(node) {
     return activeNodes.has(node) || KNOWN_NODES.includes(node);
 }
 
-// List for status endpoints: known nodes + any extra connected devices, with status.
 function reportedActiveNodes() {
     const nodes = [];
     const seen = new Set();
@@ -92,7 +87,6 @@ function reportedActiveNodes() {
     return nodes;
 }
 
-// Keywords that mandate PC system execution
 const PC_CONTROL_KEYWORDS = [
     'pc', 'laptop', 'desktop', 'lunapc',
     'create file', 'save file', 'write file', 'make file',
@@ -102,7 +96,6 @@ const PC_CONTROL_KEYWORDS = [
     'save in pc', 'save to pc', 'pc me', 'pc mai', 'laptop me', 'laptop mai'
 ];
 
-// Keywords that mandate Android system execution
 const ANDROID_CONTROL_KEYWORDS = [
     'android', 'phone', 'mobile', 'lunaandroid',
     'macrodroid', 'trigger macro', 'send sms', 'make call',
@@ -110,7 +103,6 @@ const ANDROID_CONTROL_KEYWORDS = [
     'phone me', 'phone mai', 'mobile me', 'mobile mai'
 ];
 
-// Keywords that trigger real-time web search
 const REALTIME_KEYWORDS = [
     'news', 'latest', 'today', 'abhi', 'aaj', 'kal', 'kya hua', 'current', 'now',
     'weather', 'mausam', 'temperature', 'price', 'rate', 'score', 'result',
@@ -118,7 +110,6 @@ const REALTIME_KEYWORDS = [
     'trending', 'viral', 'breaking', 'update', 'live'
 ];
 
-// Keywords that need the daily news brief injected (only add news context when relevant)
 const NEWS_KEYWORDS = [
     'news', 'brief', 'khabar', 'samachar', 'headline', 'current affairs', 'day mai kya hua'
 ];
@@ -133,7 +124,7 @@ let serverStartTime = Date.now();
 let totalAiCalls = 0;
 let failedAiCalls = 0;
 
-// ─── IN-MEMORY CONVERSATION HISTORY (Zero API cost) ───────────────────────────
+// ─── IN-MEMORY CONVERSATION HISTORY ───────────────────────────────────────────
 const deviceHistory = new Map();
 
 function recallMemory(senderId) {
@@ -151,7 +142,6 @@ function saveToMemory(senderId, userPrompt, aiReply) {
     if (history.length > CONFIG.historyLimit) history.splice(0, history.length - CONFIG.historyLimit);
 }
 
-// Trim memory for devices not seen for a long time to keep RAM low
 function trimStaleMemory() {
     const cutoff = Date.now() - CONFIG.heartbeatCleanupSec * 1000;
     for (const [id, ts] of lastSeen) {
@@ -161,12 +151,11 @@ function trimStaleMemory() {
     }
 }
 
-// ─── FREE WEB SEARCH (DuckDuckGo, No API Key) ─────────────────────────────────
+// ─── FREE WEB SEARCH ──────────────────────────────────────────────────────────
 let dailyNewsCache = "";
 let lastSearchAt = 0;
 
 async function webSearch(query) {
-    // Throttle DuckDuckGo calls (min 1s gap) to avoid IP rate-limiting on servers
     const now = Date.now();
     const sinceLast = now - lastSearchAt;
     if (sinceLast < 1000) await new Promise(r => setTimeout(r, 1000 - sinceLast));
@@ -202,20 +191,18 @@ refreshDailyNews();
 setInterval(refreshDailyNews, CONFIG.newsRefreshHours * 60 * 60 * 1000);
 setInterval(trimStaleMemory, CONFIG.heartbeatCleanupSec * 1000).unref();
 
-// ─── CLEAN REPLY (strip emojis & markdown for voice output) ───────────────────
 function cleanReply(text) {
     return text
-        .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '') // strip emojis & symbols
-        .replace(/\*\*([^*]+)\*\*/g, '$1')        // strip **bold**
-        .replace(/\*([^*]+)\*/g, '$1')             // strip *italic*
-        .replace(/[*#`~_>|\\]/g, '')               // strip remaining markdown
-        .replace(/\/{2,}/g, '')                    // strip // or ///
-        .replace(/^\s*[-•]\s*/gm, '')              // strip bullet points
-        .replace(/\n{3,}/g, '\n\n')                // collapse excess newlines
+        .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}]/gu, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/[*#`~_>|\\]/g, '')
+        .replace(/\/{2,}/g, '')
+        .replace(/^\s*[-•]\s*/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
 
-// ─── RATE LIMIT PER DEVICE (protects AI budget + API limits) ─────────────────
 const lastAiCallAt = new Map();
 function checkAiRateLimit(senderId) {
     const last = lastAiCallAt.get(senderId) || 0;
@@ -225,7 +212,6 @@ function checkAiRateLimit(senderId) {
     return false;
 }
 
-// ─── HTTP STATUS & HEALTH ENDPOINTS ───────────────────────────────────────────
 function uptimeSeconds() {
     return Math.floor((Date.now() - serverStartTime) / 1000);
 }
@@ -261,14 +247,6 @@ app.get('/health', (_, res) => {
     });
 });
 
-// ─── HELPER: Find any active node in a set ────────────────────────────────────
-function isAnyOnline(targetSet) {
-    for (const node of targetSet) {
-        if (nodeIsActive(node)) return true;
-    }
-    return false;
-}
-
 function getOnlineNode(targetSet) {
     for (const node of targetSet) {
         if (nodeIsActive(node)) return node;
@@ -276,7 +254,6 @@ function getOnlineNode(targetSet) {
     return null;
 }
 
-// ─── GENERATE AI REPLY WITH TIMEOUT + RATE-LIMIT RETRY ────────────────────────
 async function generateAiReply(userPrompt, systemInstruction) {
     totalAiCalls++;
     const call = () => ai.models.generateContent({
@@ -338,82 +315,78 @@ wss.on('connection', (ws, req) => {
             return;
         }
 
+        // FIX 1: Safe payload parsing with string fallback
+        let data;
         try {
-            // Support plain text messages as well as JSON
-            let data;
-            try {
-                data = JSON.parse(strMsg);
-            } catch {
-                data = { prompt: strMsg, target_node: "luna_server" };
-            }
+            data = JSON.parse(strMsg);
+        } catch {
+            // Converts unquoted literal strings (e.g. "hi") safely without throwing Unexpected Token error
+            data = { prompt: strMsg, target_node: "luna_server" };
+        }
 
-            const targetNode = (data.target_node || "luna_server").toLowerCase();
-            const senderId = (data.sender_id || registeredId).toLowerCase();
+        const targetNode = (data.target_node || "luna_server").toLowerCase();
+        const senderId = (data.sender_id || registeredId).toLowerCase();
 
-            // Re-register device under its real sender_id if different
-            if (senderId && senderId !== 'unknown' && registeredId !== senderId) {
-                activeNodes.delete(registeredId);
-                nodeLocations.delete(registeredId);
-                registeredId = senderId;
-                activeNodes.set(registeredId, ws);
-            }
+        // Re-register device under its real sender_id if different
+        if (senderId && senderId !== 'unknown' && registeredId !== senderId) {
+            activeNodes.delete(registeredId);
+            nodeLocations.delete(registeredId);
+            registeredId = senderId;
+            activeNodes.set(registeredId, ws);
+        }
 
-            // Cache coordinates if provided
-            if (data.coords || (data.lat && data.lon)) {
-                nodeLocations.set(registeredId, data.coords || { lat: data.lat, lon: data.lon });
-            }
+        // Cache coordinates if provided
+        if (data.coords || (data.lat && data.lon)) {
+            nodeLocations.set(registeredId, data.coords || { lat: data.lat, lon: data.lon });
+        }
 
-            // ── LUNA SERVER AI & TASK ROUTER ──────────────────────────────────
-            if (targetNode === "luna_server" || targetNode === "server") {
-                const userPrompt = data.prompt || data.message || "";
-                if (!userPrompt) return;
+        // ── FIX 2: DIRECT LUNA SERVER PROCESSING ────────────────────────────
+        if (targetNode === "luna_server" || targetNode === "server") {
+            const userPrompt = data.prompt || data.message || data.action_prompt || "";
+            if (!userPrompt) return;
 
-                const senderLocation = nodeLocations.get(senderId) || nodeLocations.get('lunaandroid') || "Unknown Location";
-                const promptLower = userPrompt.toLowerCase();
+            const senderLocation = nodeLocations.get(senderId) || nodeLocations.get('lunaandroid') || "Unknown Location";
+            const promptLower = userPrompt.toLowerCase();
 
-                // Auto-detect target device from prompt keywords
-                const requiresPcSystem = PC_CONTROL_KEYWORDS.some(kw => promptLower.includes(kw));
-                const requiresAndroidSystem = ANDROID_CONTROL_KEYWORDS.some(kw => promptLower.includes(kw));
+            const requiresPcSystem = PC_CONTROL_KEYWORDS.some(kw => promptLower.includes(kw));
+            const requiresAndroidSystem = ANDROID_CONTROL_KEYWORDS.some(kw => promptLower.includes(kw));
 
-                let targetActionNode = null;
-                let systemNotice = "";
+            let targetActionNode = null;
+            let systemNotice = "";
 
-                if (requiresPcSystem) {
-                    const activePcNode = getOnlineNode(PC_NODES) || 'lunapc';
-                    if (nodeIsActive(activePcNode)) {
-                        targetActionNode = activePcNode;
-                    } else {
-                        systemNotice = "Luna PC is currently OFFLINE. File saving or PC system actions cannot be run right now.";
-                    }
-                } else if (requiresAndroidSystem) {
-                    const activeAndroidNode = getOnlineNode(ANDROID_NODES) || 'lunaandroid';
-                    if (nodeIsActive(activeAndroidNode)) {
-                        targetActionNode = activeAndroidNode;
-                    } else {
-                        systemNotice = "Luna Android is currently OFFLINE. Mobile/system action cannot be triggered right now.";
-                    }
+            if (requiresPcSystem) {
+                const activePcNode = getOnlineNode(PC_NODES) || 'lunapc';
+                if (nodeIsActive(activePcNode)) {
+                    targetActionNode = activePcNode;
+                } else {
+                    systemNotice = "Luna PC is currently OFFLINE. File saving or PC system actions cannot be run right now.";
                 }
-
-                // In-memory conversation context (zero API cost)
-                const pastContext = recallMemory(senderId);
-
-                // Real-time web search only if query needs live data (free, but throttled)
-                const needsWebSearch = REALTIME_KEYWORDS.some(kw => promptLower.includes(kw));
-                let webContext = "";
-                if (needsWebSearch) {
-                    webContext = await webSearch(userPrompt);
-                    log('debug', `WEB SEARCH: "${userPrompt}" -> ${webContext ? 'results found' : 'no results'}`);
+            } else if (requiresAndroidSystem) {
+                const activeAndroidNode = getOnlineNode(ANDROID_NODES) || 'lunaandroid';
+                if (nodeIsActive(activeAndroidNode)) {
+                    targetActionNode = activeAndroidNode;
+                } else {
+                    systemNotice = "Luna Android is currently OFFLINE. Mobile/system action cannot be triggered right now.";
                 }
+            }
 
-                // Inject daily news ONLY if query is news-related (saves input tokens per call)
-                const needsNews = NEWS_KEYWORDS.some(kw => promptLower.includes(kw)) || needsWebSearch;
-                const currentDateTime = new Date().toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                    dateStyle: "full",
-                    timeStyle: "medium"
-                });
+            const pastContext = recallMemory(senderId);
 
-                const systemInstruction = `You are Luna, a female 24/7 intelligent multi-device voice assistant.
+            const needsWebSearch = REALTIME_KEYWORDS.some(kw => promptLower.includes(kw));
+            let webContext = "";
+            if (needsWebSearch) {
+                webContext = await webSearch(userPrompt);
+                log('debug', `WEB SEARCH: "${userPrompt}" -> ${webContext ? 'results found' : 'no results'}`);
+            }
+
+            const needsNews = NEWS_KEYWORDS.some(kw => promptLower.includes(kw)) || needsWebSearch;
+            const currentDateTime = new Date().toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                dateStyle: "full",
+                timeStyle: "medium"
+            });
+
+            const systemInstruction = `You are Luna, a female 24/7 intelligent multi-device voice assistant.
 
 CURRENT STATE:
 - Current Live Date & Time (IST): ${currentDateTime}
@@ -439,67 +412,61 @@ DECISION & RESPONSE RULES:
 6. Conversation History:
 ${pastContext}`;
 
-                // Protect AI budget: throttle rapid-fire messages per device
-                if (checkAiRateLimit(senderId)) {
-                    ws.send(JSON.stringify({
-                        sender_id: "luna_server",
-                        target_node: senderId,
-                        status: "busy",
-                        response: "Boss, thoda ruk ke boliye — pehla sawaal process ho raha hai."
-                    }));
-                    return;
-                }
-
-                let aiReply = "";
-                try {
-                    aiReply = await generateAiReply(userPrompt, systemInstruction);
-                } catch (aiErr) {
-                    log('error', 'AI GENERATION ERROR:', aiErr.message);
-                    aiReply = aiErr.message === 'AI_TIMEOUT'
-                        ? "Boss, AI response ka timeout ho gaya. Thodi der baad try kijiye."
-                        : "Boss, request error aaya. Thodi der baad try kijiye.";
-                }
-
-                // Forward task payload to PC or Android if detected
-                if (targetActionNode && activeNodes.has(targetActionNode)) {
-                    activeNodes.get(targetActionNode).send(JSON.stringify({
-                        sender_id: "luna_server",
-                        target_node: targetActionNode,
-                        action_prompt: userPrompt,
-                        ai_response: aiReply,
-                        coords: senderLocation
-                    }));
-                }
-
-                // Send voice reply back to caller
+            if (checkAiRateLimit(senderId)) {
                 ws.send(JSON.stringify({
                     sender_id: "luna_server",
                     target_node: senderId,
-                    status: "success",
-                    response: aiReply,
-                    executing_node: targetActionNode || "luna_server"
+                    status: "busy",
+                    response: "Boss, thoda ruk ke boliye — pehla sawaal process ho raha hai."
                 }));
+                return;
+            }
 
-                // Save to in-memory conversation history
-                saveToMemory(senderId, userPrompt, aiReply);
+            let aiReply = "";
+            try {
+                aiReply = await generateAiReply(userPrompt, systemInstruction);
+            } catch (aiErr) {
+                log('error', 'AI GENERATION ERROR:', aiErr.message);
+                aiReply = aiErr.message === 'AI_TIMEOUT'
+                    ? "Boss, AI response ka timeout ho gaya. Thodi der baad try kijiye."
+                    : "Boss, request error aaya. Thodi der baad try kijiye.";
             }
-            // ── PEER-TO-PEER PASS-THROUGH ROUTING ────────────────────────────
-            else if (activeNodes.has(targetNode)) {
-                const targetWs = activeNodes.get(targetNode);
-                if (targetWs && targetWs.readyState === 1) targetWs.send(rawMsg);
-            }
-            // ── TARGET NODE OFFLINE ───────────────────────────────────────────
-            else {
-                ws.send(JSON.stringify({
+
+            // Forward task payload to PC or Android if detected
+            if (targetActionNode && activeNodes.has(targetActionNode)) {
+                activeNodes.get(targetActionNode).send(JSON.stringify({
                     sender_id: "luna_server",
-                    target_node: senderId,
-                    status: "error",
-                    message: `Device '${targetNode}' is offline.`
+                    target_node: targetActionNode,
+                    action_prompt: userPrompt,
+                    ai_response: aiReply,
+                    coords: senderLocation
                 }));
             }
 
-        } catch (err) {
-            log('error', 'PAYLOAD PARSE ERROR:', err.message);
+            // Return text/voice response to the originating client
+            ws.send(JSON.stringify({
+                sender_id: "luna_server",
+                target_node: senderId,
+                status: "success",
+                response: aiReply,
+                executing_node: targetActionNode || "luna_server"
+            }));
+
+            saveToMemory(senderId, userPrompt, aiReply);
+        }
+        // ── PEER-TO-PEER PASS-THROUGH ROUTING ────────────────────────────
+        else if (activeNodes.has(targetNode)) {
+            const targetWs = activeNodes.get(targetNode);
+            if (targetWs && targetWs.readyState === 1) targetWs.send(rawMsg);
+        }
+        // ── TARGET NODE OFFLINE ───────────────────────────────────────────
+        else {
+            ws.send(JSON.stringify({
+                sender_id: "luna_server",
+                target_node: senderId,
+                status: "error",
+                message: `Target node '${targetNode}' offline hai.`
+            }));
         }
     });
 
@@ -517,12 +484,9 @@ ${pastContext}`;
     });
 });
 
-// ─── KEEPALIVE: drop only truly dead connections (tolerant of no-pong clients)─
 const keepAlive = setInterval(() => {
     wss.clients.forEach((ws) => {
         ws._missedPings = (ws._missedPings || 0) + 1;
-        // Allow 2 missed pings (~60s) before dropping: smartwatch/Android
-        // clients often don't answer pong frames but are still fully alive.
         if (ws._missedPings > 2) {
             log('warn', 'KEEPALIVE: dropping unresponsive connection');
             ws.terminate();
@@ -533,7 +497,6 @@ const keepAlive = setInterval(() => {
 }, CONFIG.pingIntervalSec * 1000);
 keepAlive.unref();
 
-// ─── GRACEFUL SHUTDOWN (SIGTERM / SIGINT / CTRL+C) ────────────────────────────
 function shutdown(signal) {
     log('info', `Received ${signal}. Shutting down gracefully...`);
     clearInterval(keepAlive);

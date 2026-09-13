@@ -69,15 +69,18 @@ const ANDROID_NODES = new Set(['android', 'mobile', 'phone', 'lunaandroid']);
 const KNOWN_NODES = ['luna_watch', 'lunapc', 'lunaandroid'];
 
 function nodeIsActive(node) {
-    return activeNodes.has(node) || KNOWN_NODES.includes(node);
+    const ws = activeNodes.get(node);
+    return ws && ws.readyState === 1;
 }
 
 function reportedActiveNodes() {
     const nodes = [];
     const seen = new Set();
-    for (const [id] of activeNodes) {
-        nodes.push({ id, status: "online" });
-        seen.add(id);
+    for (const [id, ws] of activeNodes) {
+        if (ws.readyState === 1) {
+            nodes.push({ id, status: "online" });
+            seen.add(id);
+        }
     }
     for (const node of KNOWN_NODES) {
         if (!seen.has(node)) {
@@ -360,18 +363,18 @@ wss.on('connection', (ws, req) => {
             let systemNotice = "";
 
             if (requiresPcSystem) {
-                const activePcNode = getOnlineNode(PC_NODES) || 'lunapc';
-                if (nodeIsActive(activePcNode)) {
+                const activePcNode = getOnlineNode(PC_NODES);
+                if (activePcNode) {
                     targetActionNode = activePcNode;
                 } else {
-                    systemNotice = "Luna PC is currently OFFLINE. File saving or PC system actions cannot be run right now.";
+                    systemNotice = "CRITICAL: Luna PC (lunapc) is currently DISCONNECTED/OFFLINE. Do NOT pretend or claim that you saved any file to PC. State clearly to the user that PC is offline and file cannot be saved right now.";
                 }
             } else if (requiresAndroidSystem) {
-                const activeAndroidNode = getOnlineNode(ANDROID_NODES) || 'lunaandroid';
-                if (nodeIsActive(activeAndroidNode)) {
+                const activeAndroidNode = getOnlineNode(ANDROID_NODES);
+                if (activeAndroidNode) {
                     targetActionNode = activeAndroidNode;
                 } else {
-                    systemNotice = "Luna Android is currently OFFLINE. Mobile/system action cannot be triggered right now.";
+                    systemNotice = "CRITICAL: Luna Android is currently DISCONNECTED/OFFLINE. Do NOT claim that macro or command was executed on mobile.";
                 }
             }
 
@@ -398,7 +401,7 @@ CURRENT STATE:
 - Requesting Device: ${senderId}
 - Current Coordinates/Location: ${JSON.stringify(senderLocation)}
 - Target Node Auto-Detection: ${targetActionNode ? `Forwarding task to '${targetActionNode}'` : "Handled directly by Luna Server"}
-- Node Status: ${systemNotice || "All tasks handled directly by Luna Server."}
+- Node Status Notice: ${systemNotice || "All system target nodes checked and verified."}
 - Profile: ${cachedUserProfile}
 ${webContext ? `\nLIVE WEB SEARCH RESULTS (use for answering):\n${webContext}` : ''}
 ${needsNews && dailyNewsCache ? `\nDAILY NEWS BRIEFING (auto-refreshed every 24h):\n${dailyNewsCache}` : ''}
@@ -411,7 +414,7 @@ DEVICE CAPABILITIES:
 DECISION & RESPONSE RULES:
 1. DIRECT ANSWER: Answer information queries (search, time, weather, nearby places) concisely. Use LIVE WEB SEARCH RESULTS if provided.
 2. HYBRID TASK: If user wants to search AND save (e.g. nearby cafe list pc mai save karo), provide the answer AND confirm it is forwarded to PC or Android. Never offer to save on Watch.
-3. OFFLINE DEVICE: If target device is offline, tell user clearly and still answer the query part.
+3. OFFLINE DEVICE: If target device is offline, tell user clearly that the device is offline and file cannot be saved/action cannot be performed right now, but still answer the query part.
 4. PLAIN TEXT ONLY: No emojis, no markdown (no *, **, #, -, backtick), no bullet points. Clean spoken text only for Smartwatch speaker.
 5. Concise Hinglish/Hindi/English mix. Address user as Boss or Sir. You are female.
 6. Conversation History:
@@ -437,7 +440,7 @@ ${pastContext}`;
                     : "Boss, request error aaya. Thodi der baad try kijiye.";
             }
 
-            // Forward task payload to PC or Android if detected
+            // Forward task payload to PC or Android if detected and online
             if (targetActionNode && activeNodes.has(targetActionNode)) {
                 activeNodes.get(targetActionNode).send(JSON.stringify({
                     sender_id: "luna_server",

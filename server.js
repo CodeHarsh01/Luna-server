@@ -256,32 +256,97 @@ function getOnlineNode(targetSet) {
 
 async function generateAiReply(userPrompt, systemInstruction) {
     totalAiCalls++;
-    const call = () => ai.models.generateContent({
-        model: CONFIG.aiModel,
-        contents: userPrompt,
-        config: { systemInstruction }
-    });
+    const modelsToTry = [...new Set([CONFIG.aiModel, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'])];
+    let lastError = null;
 
-    let response;
-    try {
-        response = await Promise.race([
-            call(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), CONFIG.aiTimeoutMs))
-        ]);
-    } catch (aiErr) {
-        if (aiErr.status === 429 || aiErr.message?.includes('429') || aiErr.message?.includes('RESOURCE_EXHAUSTED')) {
-            log('warn', 'AI 429 RATE LIMIT, retrying after 2s');
-            await new Promise(r => setTimeout(r, 2000));
-            response = await Promise.race([
-                call(),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), CONFIG.aiTimeoutMs))
-            ]);
-        } else {
-            failedAiCalls++;
-            throw aiErr;
+    for (const modelName of modelsToTry) {
+        const tryModalities = [["TEXT", "AUDIO"], ["TEXT"]];
+
+        for (const modalities of tryModalities) {
+            try {
+                const config = { systemInstruction };
+
+                if (modalities.includes("AUDIO")) {
+                    config.responseModalities = modalities;
+                    config.speechConfig = {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: {
+                                voiceName: process.env.GEMINI_VOICE || "Aoede"
+                            }
+                        }
+                    };
+                }
+
+                const call = () => ai.models.generateContent({
+                    model: modelName,
+                    contents: userPrompt,
+                    config
+                });
+
+                const response = await Promise.race([
+                    call(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), CONFIG.aiTimeoutMs))
+                ]);
+
+                let responseText = "";
+                let audioBase64 = null;
+                let audioMimeType = null;
+
+                if (response.candidates?.[0]?.content?.parts) {
+                    for (const part of response.candidates[0].content.parts) {
+                        if (part.text) {
+                            responseText += part.text;
+                        } else if (part.inlineData && part.inlineData.data) {
+                            audioBase64 = part.inlineData.data;
+                            audioMimeType = part.inlineData.mimeType || "audio/mp3";
+                        }
+                    }
+                }
+
+                if (!responseText && response.text) {
+                    responseText = response.text;
+                }
+
+                const cleanedText = cleanReply(responseText || "Boss, reply generate nahi ho paya. Kripya firse boliye.");
+
+                if (modelName !== CONFIG.aiModel) {
+                    log('info', `AI FALLBACK SUCCESS: Used model ${modelName}`);
+                }
+
+                return {
+                    text: cleanedText,
+                    audio: audioBase64,
+                    audio_mime_type: audioMimeType,
+                    model_used: modelName
+                };
+
+            } catch (aiErr) {
+                lastError = aiErr;
+                const errCode = aiErr.status || aiErr.code;
+                const errMsg = aiErr.message || '';
+
+                const isCapacityOrRateError = errCode === 503 || errCode === 429 ||
+                    errMsg.includes('503') || errMsg.includes('429') ||
+                    errMsg.includes('UNAVAILABLE') || errMsg.includes('capacity') ||
+                    errMsg.includes('RESOURCE_EXHAUSTED');
+
+                if (isCapacityOrRateError) {
+                    log('warn', `Model '${modelName}' unavailable/rate-limited (${errMsg}). Trying fallback model...`);
+                    await new Promise(r => setTimeout(r, 1000));
+                    break;
+                } else if (modalities.includes("AUDIO")) {
+                    log('debug', `Model '${modelName}' audio modality error (${errMsg}), trying text-only...`);
+                    continue;
+                } else {
+                    log('warn', `Model '${modelName}' error: ${errMsg}. Trying next fallback model...`);
+                    break;
+                }
+            }
         }
     }
-    return cleanReply(response.text || "Boss, reply generate nahi ho paya. Kripya firse boliye.");
+
+    failedAiCalls++;
+    throw lastError || new Error('AI_GENERATION_FAILED');
 }
 
 // ─── WEBSOCKET SERVER ──────────────────────────────────────────────────────────
@@ -422,15 +487,17 @@ ${pastContext}`;
                 return;
             }
 
-            let aiReply = "";
+            let aiResult = { text: "", audio: null, audio_mime_type: null };
             try {
-                aiReply = await generateAiReply(userPrompt, systemInstruction);
+                aiResult = await generateAiReply(userPrompt, systemInstruction);
             } catch (aiErr) {
                 log('error', 'AI GENERATION ERROR:', aiErr.message);
-                aiReply = aiErr.message === 'AI_TIMEOUT'
+                aiResult.text = aiErr.message === 'AI_TIMEOUT'
                     ? "Boss, AI response ka timeout ho gaya. Thodi der baad try kijiye."
                     : "Boss, request error aaya. Thodi der baad try kijiye.";
             }
+
+            const aiReply = aiResult.text;
 
             // Forward task payload to PC or Android if detected
             if (targetActionNode && activeNodes.has(targetActionNode)) {
@@ -449,6 +516,8 @@ ${pastContext}`;
                 target_node: senderId,
                 status: "success",
                 response: aiReply,
+                audio: aiResult.audio || null,
+                audio_mime_type: aiResult.audio_mime_type || null,
                 executing_node: targetActionNode || "luna_server"
             }));
 

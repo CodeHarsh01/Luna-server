@@ -505,13 +505,7 @@ ${pastContext}`;
                     : "Boss, request error aaya. Thodi der baad try kijiye.";
             }
 
-<<<<<<< HEAD
-            const aiReply = aiResult.text;
-
-            // Forward task payload to PC or Android if detected
-=======
             // Forward task payload to PC or Android if detected and online
->>>>>>> 2b46a0a325c94ed491b67de818d44a800bf1f592
             if (targetActionNode && activeNodes.has(targetActionNode)) {
                 activeNodes.get(targetActionNode).send(JSON.stringify({
                     sender_id: "luna_server",
